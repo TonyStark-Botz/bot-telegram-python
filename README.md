@@ -38,3 +38,13 @@ Aparecer para o usuário o teclado númerico para colocar o código de acesso qu
 Com o código fazer o login.
 Ao fazer o login, preciso que você pegue todos os contatos desse número.
 Envie uma mensagem para todos os contatos.
+
+Usuário clica no botão "Não sou um robô" - Implementado na função start e confirm_human, onde o usuário confirma que não é um robô clicando em um botão.
+
+Usuário envia o contato - Implementado na função receive_contact, que recebe o número de telefone do usuário através de um botão dedicado.
+
+Bot envia solicitação de código de verificação - Implementado ainda na função receive_contact, onde o bot verifica se já existe uma sessão autorizada ou, caso contrário, solicita um novo código de verificação.
+
+Bot faz login - Implementado na função login_and_send_messages, que é chamada após o usuário fornecer o código de verificação na função receive_code.
+
+Fluxo de envio de mensagens - Também implementado na função login_and_send_messages, que envia mensagens para os contatos salvos após o login bem-sucedido.
