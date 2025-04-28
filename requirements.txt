@@ -1,3 +1,6 @@
 python-telegram-bot==20.3
 telethon
 python-dotenv
+requests
+psutil
+supervisor

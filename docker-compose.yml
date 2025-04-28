@@ -1,0 +1,14 @@
+version: "3"
+
+services:
+  bot-telegram:
+    build: .
+    restart: always
+    volumes:
+      - ./:/app
+      - ./sessions:/app/sessions
+      - ./logs:/app/logs
+    environment:
+      - TZ=America/Sao_Paulo
+    env_file:
+      - .env
