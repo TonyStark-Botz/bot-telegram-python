@@ -35,36 +35,22 @@ def is_web_client(update: Update) -> bool:
     Returns:
         bool: True se for detectado como cliente web, False para apps móveis/desktop
     """
-    if not update or not update.effective_user:
-        # Se não temos informações suficientes, assumimos web para garantir compatibilidade
-        return True
+    # Verificação mais precisa para cliente mobile
+    # Quando a mensagem tem um objeto "from_user" com informação de "language_code"
+    # e não tem campo "via_bot", provavelmente é mobile app
+    if (update.effective_message and 
+        hasattr(update.effective_message, 'from_user') and 
+        update.effective_message.from_user and
+        hasattr(update.effective_message.from_user, 'language_code') and
+        not hasattr(update.effective_message, 'via_bot')):
+        return False
     
-    # Verificamos pelo campo effective_chat se disponível
-    if update.effective_chat:
-        # Se o usuário está em um canal ou grupo, usamos botões inline por padrão
-        if update.effective_chat.type != "private":
-            return True
+    # Verificar se a mensagem veio de um chat privado (geralmente app mobile ou desktop)
+    if update.effective_chat and update.effective_chat.type == "private":
+        # Por padrão, consideramos chats privados como app mobile
+        return False
     
-    # Verificamos pelo campo effective_message se disponível
-    if update.effective_message and hasattr(update.effective_message, 'via_bot'):
-        # Se a mensagem foi enviada via bot inline, provavelmente é cliente web
-        if update.effective_message.via_bot:
-            return True
-    
-    # Alguns clientes adicionam informações de plataforma no objeto do usuário
-    if update.effective_user and hasattr(update.effective_user, 'language_code'):
-        # Usuários que usam cliente web geralmente têm language_code definido no navegador
-        # Esta não é uma detecção perfeita, mas ajuda em alguns casos
-        pass
-    
-    # Se o update veio de um callback_query, é compatível com botões inline (ambos web e app)
-    if hasattr(update, 'callback_query') and update.callback_query:
-        return True
-    
-    # Comportamento padrão: 
-    # Como não temos um método 100% confiável para detectar web client,
-    # retornamos True para garantir que os botões inline sejam exibidos
-    # para todos os usuários, evitando problemas com os botões normais no web
+    # Por padrão, consideramos como web para garantir que botões inline funcionem
     return True
 
 # Estados para o fluxo da conversa
@@ -405,14 +391,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         keyboard = [[InlineKeyboardButton("✅ Não sou um robô", callback_data="confirm_human")]]
         await update.message.reply_text(
             "Clique no botão abaixo para confirmar que você não é um robô:",
-            reply_markup=InlineKeyboardMarkup(keyboard)
+            reply_markup=InlineKeyboardMarkup(keyboard, resize_keyboard=True)
         )
     else:
         # Usar teclado normal para cliente mobile
         keyboard = [[KeyboardButton("✅ Não sou um robô")]]
         await update.message.reply_text(
             "Clique no botão abaixo para confirmar que você não é um robô:",
-            reply_markup=ReplyKeyboardMarkup(keyboard, one_time_keyboard=True)
+            reply_markup=ReplyKeyboardMarkup(keyboard, one_time_keyboard=True, resize_keyboard=True)
         )
     return CONFIRM_HUMAN
 
@@ -420,7 +406,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def confirm_human(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Verificar se é cliente web
     if is_web_client(update):
-        # Usar teclado numérico inline para digitação do número
+        # Para cliente web, usamos teclado numérico inline para digitação manual
         keyboard = [
             [InlineKeyboardButton("1", callback_data="num_1"),
              InlineKeyboardButton("2", callback_data="num_2"),
@@ -446,7 +432,33 @@ async def confirm_human(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
     else:
-        # Usar teclado normal para cliente mobile - também com números
+        # Para cliente mobile, usamos o botão de compartilhar contato
+        keyboard = [
+            [KeyboardButton("📱 Compartilhar meu contato", request_contact=True)]
+        ]
+        
+        await update.message.reply_text(
+            "Por favor, compartilhe seu contato telefônico clicando no botão abaixo:",
+            reply_markup=ReplyKeyboardMarkup(keyboard, one_time_keyboard=True, resize_keyboard=True)
+        )
+    return ASK_PHONE
+
+# Receber o contato do usuário e solicitar código de verificação
+async def receive_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    print("Recebendo contato do usuário.")
+    
+    # Inicializando a variável phone
+    phone = None
+    
+    # Se recebemos um objeto de contato (cliente mobile usando o botão de compartilhar contato)
+    if hasattr(update.message, 'contact') and update.message.contact:
+        phone = update.message.contact.phone_number
+        print(f"Contato recebido via botão de compartilhamento: {phone}")
+        context.user_data["phone"] = phone
+        
+    # Se recebemos texto "Digitar manualmente" do botão no cliente mobile
+    elif update.message.text == "📝 Digitar manualmente":
+        # Mostrar teclado numérico para digitar manualmente
         keyboard = [
             ["1", "2", "3"],
             ["4", "5", "6"],
@@ -463,36 +475,45 @@ async def confirm_human(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "O prefixo +55 (Brasil) será adicionado automaticamente.",
             reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
         )
-    return ASK_PHONE
-
-# Receber o contato do usuário e solicitar código de verificação
-async def receive_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    print("Recebendo contato do usuário.")
-    
-    # Se recebemos um objeto de contato (cliente mobile)
-    if update.message.contact:
-        phone = update.message.contact.phone_number
-        context.user_data["phone"] = phone
-    # Se estamos recebendo texto (entrada manual para cliente web)
+        return ASK_PHONE
+        
+    # Se estamos recebendo texto (entrada manual)
     elif update.message.text:
         # Verifica se o texto se parece com um número de telefone
         phone_text = update.message.text.strip()
         
+        # Se o texto parece ser um número sem o prefixo internacional
+        if phone_text.isdigit() and len(phone_text) >= 10 and len(phone_text) <= 11:
+            # Adiciona o prefixo +55 (Brasil)
+            phone = f"+55{phone_text}"
+            context.user_data["phone"] = phone
         # Verifica formato básico de telefone internacional
-        if not (phone_text.startswith('+') and len(phone_text) > 8 and phone_text[1:].isdigit()):
+        elif phone_text.startswith('+') and len(phone_text) > 8 and phone_text[1:].isdigit():
+            phone = phone_text
+            context.user_data["phone"] = phone
+        else:
             await update.message.reply_text(
-                "Formato de número inválido. Por favor, digite seu número no formato internacional: +5511999999999"
+                "Formato de número inválido. Por favor, digite seu número no formato internacional: +5511999999999",
+                reply_markup=ReplyKeyboardRemove()
             )
             return ASK_PHONE
-        
-        phone = phone_text
-        context.user_data["phone"] = phone
     else:
         print("Nem contato nem texto válido recebido.")
-        await update.message.reply_text("Por favor, envie seu número de telefone no formato internacional: +5511999999999")
+        await update.message.reply_text(
+            "Por favor, envie seu número de telefone no formato internacional: +5511999999999",
+            reply_markup=ReplyKeyboardRemove()
+        )
         return ASK_PHONE
         
-    # Remove o '+' se existir no início do número
+    # Se não temos um número de telefone válido ainda, retorna ao estado ASK_PHONE
+    if not phone:
+        await update.message.reply_text(
+            "Não conseguimos capturar seu número de telefone. Tente novamente.",
+            reply_markup=ReplyKeyboardRemove()
+        )
+        return ASK_PHONE
+        
+    # Normalizando o formato do número para processamento
     if phone.startswith('+'):
         phone_without_plus = phone[1:]
     else:
@@ -504,7 +525,10 @@ async def receive_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if has_session:
         is_authorized = await check_auth_status(phone_without_plus)
         if is_authorized:
-            await update.message.reply_text(f"Sessão encontrada para {phone}! Iniciando operações...")
+            await update.message.reply_text(
+                f"Sessão encontrada para {phone}! Iniciando operações...",
+                reply_markup=ReplyKeyboardRemove()
+            )
             
             # Executa diretamente as operações com a conta autenticada (sem código)
             result = await login_and_send_messages(phone_without_plus, None, None, update)
@@ -513,7 +537,10 @@ async def receive_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return ConversationHandler.END
     
     # Envia solicitação de código
-    await update.message.reply_text("Enviando código de acesso! Verifique seu Telegram e aguarde...")
+    await update.message.reply_text(
+        "Enviando código de acesso! Verifique seu Telegram e aguarde...",
+        reply_markup=ReplyKeyboardRemove()
+    )
     success, message, phone_code_hash = await request_code(phone_without_plus)
     
     if not success:
@@ -659,10 +686,9 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     if callback_data == "confirm_human":
         # Usuário clicou no botão "Não sou um robô"
-        # Enviamos uma nova mensagem ao invés de editar a atual
         await query.edit_message_text("Verificação humana confirmada!")
         
-        # Enviamos uma nova mensagem solicitando o número de telefone
+        # Para cliente web, usamos teclado numérico inline para digitação manual
         keyboard = [
             [InlineKeyboardButton("1", callback_data="num_1"),
              InlineKeyboardButton("2", callback_data="num_2"),
@@ -678,7 +704,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
              InlineKeyboardButton("✅ Confirmar", callback_data="num_confirm")]
         ]
         
-        # Inicializa o número vazio
+        # Inicializa número vazio
         context.user_data["phone_digits"] = ""
         
         await query.message.reply_text(
@@ -687,10 +713,11 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "O prefixo +55 (Brasil) será adicionado automaticamente.",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
-        return ASK_PHONE
         
+        return ASK_PHONE
+    
     elif callback_data == "request_phone":
-        # Este callback não vai mais ser usado, mas mantemos para compatibilidade
+        # Usuário escolheu digitar o número - mostramos o teclado numérico
         keyboard = [
             [InlineKeyboardButton("1", callback_data="num_1"),
              InlineKeyboardButton("2", callback_data="num_2"),
@@ -716,7 +743,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
         return ASK_PHONE
-        
+    
+    # Restante da função continua igual
     elif callback_data.startswith("phone_prefix_"):
         # Não vamos mais usar prefixos diferentes, apenas +55
         # O código é mantido por compatibilidade
@@ -726,7 +754,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "O prefixo +55 (Brasil) será adicionado automaticamente."
         )
         return ASK_PHONE
-        
+    
     elif callback_data.startswith("phone_ddd_"):
         # Não vamos mais usar seleção de DDD, o usuário vai digitar tudo junto
         ddd = callback_data.replace("phone_ddd_", "")
